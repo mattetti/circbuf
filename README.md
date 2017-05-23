@@ -23,7 +23,7 @@ The `circbuf` package ca be used with a pre allocated buffer:
 
 ```go
 myBuf := make([]byte, 6)
-buf, _ := circbuf.NewBuffer(myBuf, 0, len(myBuf))
+buf, _ := circbuf.NewBuffer(myBuf, 0, int64(len(myBuf)))
 buf.Write([]byte("hello world"))
 
 if string(buf.Bytes()) != " world" {
@@ -34,3 +34,27 @@ if string(buf.Bytes()) != " world" {
 
 Or with a memory mapped file:
 
+```go
+f, err := os.OpenFile("exampleTestfile", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
+if err != nil {
+    panic(err)
+}
+defer func() {
+    f.Close()
+    os.Remove("exampleTestfile")
+}()
+if _, err := f.Write(make([]byte, 2+7)); err != nil {
+    panic(err)
+}
+if err := f.Sync(); err != nil {
+    panic(err)
+}
+// map the file
+m, err := mmap.Map(f, mmap.RDWR, 0)
+if err != nil {
+    panic(err)
+}
+defer m.Unmap()
+buf, _ := circbuf.NewBuffer(m, 2, 7)
+buf.Write([]byte("hello world, I am a circular buffer!"))
+```

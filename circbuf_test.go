@@ -2,6 +2,7 @@ package circbuf_test
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"testing"
@@ -9,6 +10,44 @@ import (
 	mmap "github.com/edsrzf/mmap-go"
 	"github.com/mattetti/circbuf"
 )
+
+func ExampleNewBuffer() {
+	myBuf := make([]byte, 6)
+	buf, _ := circbuf.NewBuffer(myBuf, 0, int64(len(myBuf)))
+	buf.Write([]byte("hello world"))
+
+	fmt.Println(string(buf.Bytes()))
+	// Output: world
+}
+
+func ExampleWrite() {
+	// this example shows how to use a memory mapped file
+	f, err := os.OpenFile("exampleTestfile", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
+	if err != nil {
+		panic(err)
+	}
+	defer func() {
+		f.Close()
+		os.Remove("exampleTestfile")
+	}()
+	if _, err := f.Write(make([]byte, 2+7)); err != nil {
+		panic(err)
+	}
+	if err := f.Sync(); err != nil {
+		panic(err)
+	}
+	// map the file
+	m, err := mmap.Map(f, mmap.RDWR, 0)
+	if err != nil {
+		panic(err)
+	}
+	defer m.Unmap()
+	buf, _ := circbuf.NewBuffer(m, 2, 7)
+	buf.Write([]byte("hello world, I am a circular buffer!"))
+
+	fmt.Println(string(buf.Bytes()))
+	// Output: buffer!
+}
 
 func TestBuffer_Impl(t *testing.T) {
 	var _ io.Writer = &circbuf.Buffer{}
