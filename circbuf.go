@@ -1,30 +1,26 @@
 package circbuf
 
-import (
-	"fmt"
-)
-
 // Buffer implements a circular buffer. It is a fixed size,
 // and new writes overwrite older data, such that for a buffer
 // of size N, for any amount of writes, only the last N bytes
 // are retained.
 type Buffer struct {
-	data        []byte
+	data []byte
+	// size doesn't include an optional offset
 	size        int64
 	writeCursor int64
 	written     int64
+	offset      int64
 }
 
-// NewBuffer creates a new buffer of a given size. The size
-// must be greater than 0.
-func NewBuffer(size int64) (*Buffer, error) {
-	if size <= 0 {
-		return nil, fmt.Errorf("Size must be positive")
-	}
-
+// NewBuffer sets a new circular buffer on top of the passed slice of bytes.
+// A certain amount of bytes can be skipped if used as flags for instance and
+// the length of the buffer must also be set.
+func NewBuffer(m []byte, skip, size int64) (*Buffer, error) {
 	b := &Buffer{
-		size: size,
-		data: make([]byte, size),
+		offset: skip,
+		size:   size,
+		data:   m,
 	}
 	return b, nil
 }
@@ -44,9 +40,9 @@ func (b *Buffer) Write(buf []byte) (int, error) {
 
 	// Copy in place
 	remain := b.size - b.writeCursor
-	copy(b.data[b.writeCursor:], buf)
+	copy(b.data[b.offset+b.writeCursor:], buf)
 	if int64(len(buf)) > remain {
-		copy(b.data, buf[remain:])
+		copy(b.data[b.offset:], buf[remain:])
 	}
 
 	// Update location of the cursor
@@ -69,14 +65,16 @@ func (b *Buffer) TotalWritten() int64 {
 func (b *Buffer) Bytes() []byte {
 	switch {
 	case b.written >= b.size && b.writeCursor == 0:
-		return b.data
+		return b.data[b.offset:]
 	case b.written > b.size:
 		out := make([]byte, b.size)
-		copy(out, b.data[b.writeCursor:])
-		copy(out[b.size-b.writeCursor:], b.data[:b.writeCursor])
+		copy(out,
+			b.data[b.offset+b.writeCursor:])
+		copy(out[b.size-b.writeCursor:],
+			b.data[b.offset:b.offset+b.writeCursor])
 		return out
 	default:
-		return b.data[:b.writeCursor]
+		return b.data[b.offset : b.offset+b.writeCursor]
 	}
 }
 
@@ -84,9 +82,4 @@ func (b *Buffer) Bytes() []byte {
 func (b *Buffer) Reset() {
 	b.writeCursor = 0
 	b.written = 0
-}
-
-// String returns the contents of the buffer as a string
-func (b *Buffer) String() string {
-	return string(b.Bytes())
 }
