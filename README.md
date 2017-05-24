@@ -4,7 +4,7 @@ circbuf
 This repository provides the `circbuf` package. This provides a `Buffer` object
 which is a circular (or ring) buffer. It has a fixed size, but can be written
 to infinitely. Only the last `size` bytes are ever retained. The buffer implements
-the `io.Writer` interface.
+the `io.Writer` and `io.Reader` interfaces.
 This is a fork of Armon's implementation https://github.com/armon/circbuf but
 adapted so it can be backed by a memory mapped file or a pre allocated buffer.
 The main change comes from the fact that the backing buffer is provided and an

@@ -1,5 +1,7 @@
 package circbuf
 
+import "fmt"
+
 // Buffer implements a circular buffer. It is a fixed size,
 // and new writes overwrite older data, such that for a buffer
 // of size N, for any amount of writes, only the last N bytes
@@ -9,6 +11,7 @@ type Buffer struct {
 	// size doesn't include an optional offset
 	size        int64
 	writeCursor int64
+	readCursor  int64
 	written     int64
 	offset      int64
 }
@@ -58,6 +61,32 @@ func (b *Buffer) Size() int64 {
 // TotalWritten provides the total number of bytes written
 func (b *Buffer) TotalWritten() int64 {
 	return b.written
+}
+
+// Read reads up to len(p) bytes into p. It returns the number of bytes read (0
+// <= n <= len(p)) and any error encountered. Even if Read returns n < len(p),
+// it may use all of p as scratch space during the call. If some data is
+// available but not len(p) bytes, Read conventionally returns what is available
+// instead of waiting for more.
+func (b *Buffer) Read(out []byte) (n int, err error) {
+	if b.readCursor >= b.Size() {
+		// we read the entire buffer, let's loop back to the beginning
+		b.readCursor = 0
+	} else if b.readCursor+int64(len(out)) > b.Size() {
+		// we don't have enough data in our buffer to fill the passed buffer
+		// we need to do multiple passes
+		n := copy(out, b.data[b.offset+b.readCursor:])
+		b.readCursor += int64(n)
+		// TMP check, should remove
+		if b.readCursor != b.Size() {
+			panic(fmt.Sprintf("off by one much? %d - %d", b.readCursor, b.Size()))
+		}
+		n2, _ := b.Read(out[n:])
+		b.readCursor += int64(n2)
+		return int(n + n2), nil
+	}
+	n = copy(out, b.data[b.offset+b.readCursor:])
+	return
 }
 
 // Bytes provides a slice of the bytes written. This

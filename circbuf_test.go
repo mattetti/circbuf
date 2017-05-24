@@ -51,6 +51,7 @@ func ExampleWrite() {
 
 func TestBuffer_Impl(t *testing.T) {
 	var _ io.Writer = &circbuf.Buffer{}
+	var _ io.Reader = &circbuf.Buffer{}
 }
 
 // it's the caller responsibility to close the file
@@ -112,6 +113,63 @@ func TestBuffer_ShortWrite(t *testing.T) {
 			if !bytes.Equal(buf.Bytes(), inp) {
 				t.Fatalf("bad: %v", buf.Bytes())
 			}
+
+		})
+	}
+}
+
+func TestBuffer_ShortRead(t *testing.T) {
+	f, m := createTestMmap(t, t.Name(), 4+11)
+	defer func() {
+		m.Unmap()
+		f.Close()
+		os.Remove(t.Name() + "_testfile")
+	}()
+
+	testCases := []struct {
+		name   string
+		buffer []byte
+		size   int
+		offset int
+	}{
+		{name: "memory mapped file", size: 11, offset: 4, buffer: m},
+		{name: "slice of bytes", size: 11, offset: 4, buffer: make([]byte, 4+11)},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			buf, err := circbuf.NewBuffer(tt.buffer, int64(tt.offset), int64(tt.size))
+			if err != nil {
+				t.Fatalf("err: %v", err)
+			}
+
+			inp := []byte("hello world")
+
+			n, err := buf.Write(inp)
+			if err != nil {
+				t.Fatalf("err: %v", err)
+			}
+
+			out := make([]byte, len(inp))
+			n, _ = buf.Read(out)
+			if n != len(inp) {
+				t.Fatalf("expected to read %d bytes, but read %d", len(inp), n)
+			}
+			if bytes.Compare(inp, out) != 0 {
+				t.Fatalf("expected to read the same data as what was written but got %q instead of %q", out, inp)
+			}
+
+			t.Run("read in a loop", func(t *testing.T) {
+				out = make([]byte, 2*tt.size)
+				n, _ = buf.Read(out)
+				if n != len(out) {
+					t.Fatalf("expected to read 2*%d bytes, but read %d", len(out), n)
+				}
+				expected := append(inp, inp...)
+				if bytes.Compare(expected, out) != 0 {
+					t.Fatalf("expected the content of the buffer to be %q but was %q", expected, out)
+				}
+			})
 
 		})
 	}
